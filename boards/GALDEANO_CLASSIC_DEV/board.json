@@ -1,0 +1,23 @@
+{
+    "deploy": [
+        "../deploy.md"
+    ],
+    "docs": "",
+    "features": [
+        "BLE",
+        "SPIRAM",
+        "WiFi"
+    ],
+    "id": "esp32spiram",
+    "images": [
+        "esp32_psram.jpg"
+    ],
+    "mcu": "esp32",
+    "product": "GALDEANO CLASSIC DEV",
+    "thumbnail": "",
+    "url": "https://www.espressif.com/en/products/modules",
+    "variants": {
+        "idf5": "Compiled with IDF 5.x"
+    },
+    "vendor": "Espressif"
+}

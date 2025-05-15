@@ -1,0 +1,18 @@
+{
+    "deploy": [
+        "../deploy_s3.md"
+    ],
+    "docs": "",
+    "features": [
+        "BLE",
+        "WiFi"
+    ],
+    "images": [
+        "galdeano.jpg"
+    ],
+    "mcu": "esp32s3",
+    "product": "GALDEANO_CIVER_DEV",
+    "thumbnail": "",
+    "url": "https://www.espressif.com/en/products/modules",
+    "vendor": "Espressif"
+}
