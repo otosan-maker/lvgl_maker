@@ -50,7 +50,8 @@ bb:
 	cp ${PARAM_DIR}/fonts/galdeano_14.c ${MAKER_DIR}/lib/lvgl/src/font
 	cp ${PARAM_DIR}/drivers/inisetup.py ${MAKER_DIR}/lib/micropython/ports/esp32/modules/
 	cp -r ${MODUL_EIGENMATH_UX} ${MAKER_DIR}/ext_mod/
-	echo 'include($${CMAKE_CURRENT_LIST_DIR}/eigenmath_unix/eigenmath.cmake)' >> ${MAKER_DIR}/ext_mod/micropython.cmake
+	cp ${PARAM_DIR}/modules/micropython.cmake ${MAKER_DIR}/ext_mod/
+	#echo 'include($${CMAKE_CURRENT_LIST_DIR}/eigenmath_unix/eigenmath.cmake)' >> ${MAKER_DIR}/ext_mod/micropython.cmake
 	#poner #define LV_FONT_CUSTOM_DECLARE  LV_FONT_DECLARE(galdeano_14) en lvgl.h
 	#sed -i '/TEXT_TO_BE_REPLACED/c\This line is removed by the admin.' /tmp/foo
 otro:
