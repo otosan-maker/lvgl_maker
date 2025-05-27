@@ -50,39 +50,59 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "py/objstr.h"
 
 //para run()
-char cmdBuffer[256];
+#define MAXINPUTBUFF 4048
+char cmdBuffer[MAXINPUTBUFF];
+char bufferOut[2*MAXINPUTBUFF];
+int iCursorBufferOut=0;
+const char *filelarge="Entrada demasiado larga";
+
 void run(void);
 
-STATIC mp_obj_t eigenmath_run(const mp_obj_t o_in) {
+ mp_obj_t eigenmath_run(const mp_obj_t o_in) {
     mp_check_self(mp_obj_is_str_or_bytes(o_in));
     GET_STR_DATA_LEN(o_in, str, str_len);
-    printf("string length: %lu\n", str_len);
+    //printf("string length: %lu\n", str_len);
+    if(str_len>MAXINPUTBUFF){
+    	return mp_obj_new_str(filelarge, strlen(filelarge));
+    }
     strcpy(cmdBuffer, (char *)str);
+    memset(bufferOut,0,MAXINPUTBUFF);
     run();
-    return mp_obj_new_str("01234", 5);
+    return mp_obj_new_str(bufferOut, strlen(bufferOut));
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_1(eigenmath_run_obj, eigenmath_run);
-STATIC const mp_rom_map_elem_t eigenmath_module_globals_table[] = {
+ MP_DEFINE_CONST_FUN_OBJ_1(eigenmath_run_obj, eigenmath_run);
+ const mp_rom_map_elem_t eigenmath_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_eigenmath) },
     { MP_ROM_QSTR(MP_QSTR_run), MP_ROM_PTR(&eigenmath_run_obj) },
 };
-STATIC MP_DEFINE_CONST_DICT(eigenmath_module_globals, eigenmath_module_globals_table);
+ MP_DEFINE_CONST_DICT(eigenmath_module_globals, eigenmath_module_globals_table);
 
 const mp_obj_module_t eigenmath_user_cmodule = {
     .base = { &mp_type_module },
     .globals = (mp_obj_dict_t*)&eigenmath_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_eigenmath, eigenmath_user_cmodule, MODULE_EIGENMATH);
+MP_REGISTER_MODULE(MP_QSTR_eigenmath, eigenmath_user_cmodule);
 
 
-#define STACKSIZE 1000000 // evaluation stack
-#define FRAMESIZE 10000
-#define BLOCKSIZE 100000
-#define MAXBLOCKS 200
-#define NSYM 100
+// #define STACKSIZE 1000000 // evaluation stack
+// #define FRAMESIZE 10000
+// #define BLOCKSIZE 100000
+// #define MAXBLOCKS 200
+// #define NSYM 100
 
 #define JOURNALSIZE 1000
+
+
+//// ESP32 
+// 
+#define STACKSIZE 200000 // evaluation stack
+#define FRAMESIZE 10000
+#define BLOCKSIZE 50000
+#define MAXBLOCKS 4
+#define NSYM 100
+
+
 
 // MAXBLOCKS * BLOCKSIZE * sizeof (struct atom) = 480,000,000 bytes
 
@@ -765,6 +785,7 @@ void fmt_draw_ldelim(int x, int y, int h, int d);
 void fmt_draw_rdelim(int x, int y, int h, int d);
 void fmt_draw_table(int x, int y, struct atom *p);
 void writec(int c);
+char * writeBuffer(char *s,int c);
 void eval_for(void);
 void eval_gcd(void);
 void gcd(void);
@@ -832,30 +853,7 @@ void eval_isprime(void);
 void eval_kronecker(void);
 void kronecker(void);
 void kronecker_nib(void);
-void eval_latex(void);
-void latex(void);
-void latex_nib(void);
-void latex_expr(struct atom *p);
-void latex_term(struct atom *p);
-void latex_numerators(struct atom *p);
-void latex_denominators(struct atom *p);
-void latex_factor(struct atom *p);
-void latex_number(struct atom *p);
-void latex_rational(struct atom *p);
-void latex_double(struct atom *p);
-void latex_power(struct atom *p);
-void latex_base(struct atom *p);
-void latex_exponent(struct atom *p);
-void latex_imaginary(struct atom *p);
-void latex_function(struct atom *p);
-void latex_arglist(struct atom *p);
-void latex_subexpr(struct atom *p);
-void latex_symbol(struct atom *p);
-int latex_symbol_scan(char *s);
-void latex_symbol_shipout(char *s, int n);
-void latex_tensor(struct atom *p);
-void latex_tensor_matrix(struct tensor *t, int d, int *k);
-void latex_string(struct atom *p);
+
 void eval_lcm(void);
 void lcm(void);
 void lcm_nib(void);
@@ -878,8 +876,7 @@ void printbuf(char *s, int color);
 void display(void);
 void begin_document(void);
 void end_document(void);
-void begin_latex(void);
-void end_latex(void);
+
 void begin_mathml(void);
 void end_mathml(void);
 void begin_mathjax(void);
@@ -1168,13 +1165,62 @@ int tos; // top of stack
 int tof; // top of frame
 int toj; // top of journal
 
-struct atom *stack[STACKSIZE];
-struct atom *frame[FRAMESIZE];
-struct atom *journal[JOURNALSIZE];
+struct atom **stack;
+//struct atom *frame[FRAMESIZE];
+struct atom **frame;
+//struct atom *journal[JOURNALSIZE];
+struct atom **journal;
 
-struct atom *symtab[27 * NSYM];
-struct atom *binding[27 * NSYM];
-struct atom *usrfunc[27 * NSYM];
+//struct atom *symtab[27 * NSYM];
+//struct atom *binding[27 * NSYM];
+//struct atom *usrfunc[27 * NSYM];
+
+struct atom **symtab;
+struct atom **binding;
+struct atom **usrfunc;
+void init_var(){
+  printf("Memoria RAM Interna libre %d\n",heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  printf("Memoria RAM SPI     libre %d\n",heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+  stack=(struct atom **)heap_caps_malloc(STACKSIZE*sizeof(struct atom *),MALLOC_CAP_SPIRAM);
+  printf("Reservamos RAM STACKSIZE %d\n",STACKSIZE*sizeof(struct atom *));
+  //stack=(struct atom **)malloc(STACKSIZE*sizeof(struct atom *));
+  if(stack==NULL){
+    printf("Error al coger memoria para iniciar el stack de eigenmat\n");
+    printf("%d\n",heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  }
+  printf("Reservamos RAM FRAMESIZE %d\n",FRAMESIZE*sizeof(struct atom *));
+  frame=(struct atom **)heap_caps_malloc(FRAMESIZE*sizeof(struct atom *),MALLOC_CAP_SPIRAM);
+  //frame=(struct atom **)malloc(FRAMESIZE*sizeof(struct atom *));
+  if(frame==NULL){
+    printf("Error al coger memoria para iniciar el frame de eigenmat\n");
+  }
+  printf("Reservamos RAM JOURNALSIZE %d\n",JOURNALSIZE*sizeof(struct atom *));
+  journal=(struct atom **)heap_caps_malloc(JOURNALSIZE*sizeof(struct atom *),MALLOC_CAP_SPIRAM);
+  //journal=(struct atom **)malloc(JOURNALSIZE*sizeof(struct atom *));
+  if(journal==NULL){
+    printf("Error al coger memoria para iniciar el journal de eigenmat\n");
+  }
+  printf("Reservamos RAM symtab %d\n",27 * NSYM*sizeof(struct atom *));
+  symtab=(struct atom **)heap_caps_malloc(27 * NSYM*sizeof(struct atom *),MALLOC_CAP_SPIRAM);
+  //symtab=(struct atom **)malloc(27 * NSYM*sizeof(struct atom *));
+  if(symtab==NULL){
+    printf("Error al coger memoria para iniciar el symtab de eigenmat\n");
+  }
+  printf("Reservamos RAM binding %d\n",27 * NSYM*sizeof(struct atom *));
+  binding=(struct atom **)heap_caps_malloc(27 * NSYM*sizeof(struct atom *),MALLOC_CAP_SPIRAM);
+  //binding=(struct atom **)malloc(27 * NSYM*sizeof(struct atom *));
+  if(binding==NULL){
+    printf("Error al coger memoria para iniciar el binding de eigenmat\n");
+  }
+  printf("Reservamos RAM usrfunc %d\n",27 * NSYM*sizeof(struct atom *));
+  usrfunc=(struct atom **)heap_caps_malloc(27 * NSYM*sizeof(struct atom *),MALLOC_CAP_SPIRAM);
+  //usrfunc=(struct atom **)malloc(27 * NSYM*sizeof(struct atom *));
+  if(usrfunc==NULL){
+    printf("Error al coger memoria para iniciar el usrfunc de eigenmat\n");
+  }
+  printf("Memoria RAM SPI     libre %d\n",heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+}
+
 
 struct atom *p0;
 struct atom *p1;
@@ -8627,11 +8673,14 @@ floorfunc_nib(void)
 #define VAL2(p) ((int) cadr(p)->u.d)
 
 #define PLUS_SIGN '+'
-#define MINUS_SIGN '-'
-#define MULTIPLY_SIGN '*'
+
 #define GREATEREQUAL 0xe289a5
 #define LESSEQUAL 0xe289a4
 
+
+#define MINUS_SIGN '-'
+#define MULTIPLY_SIGN '*'
+/*
 #define BDLL '-' // BOX DRAW LIGHT LEFT
 #define BDLR '-' // BOX DRAW LIGHT RIGHT
 
@@ -8642,6 +8691,22 @@ floorfunc_nib(void)
 #define BDLDAL '\\' // BOX DRAW LIGHT DOWN AND LEFT
 #define BDLUAR '\\' // BOX DRAW LIGHT UP AND RIGHT
 #define BDLUAL '/' // BOX DRAW LIGHT UP AND LEFT
+
+
+#define MINUS_SIGN 0xe28892
+#define MULTIPLY_SIGN 0xc397
+*/
+#define BDLL 0xe295b4 // BOX DRAW LIGHT LEFT
+#define BDLR 0xe295b6 // BOX DRAW LIGHT RIGHT
+
+#define BDLH 0xe29480 // BOX DRAW LIGHT HORIZONTAL
+#define BDLV 0xe29482 // BOX DRAW LIGHT VERTICAL
+
+#define BDLDAR 0xe2948c // BOX DRAW LIGHT DOWN AND RIGHT
+#define BDLDAL 0xe29490 // BOX DRAW LIGHT DOWN AND LEFT
+#define BDLUAR 0xe29494 // BOX DRAW LIGHT UP AND RIGHT
+#define BDLUAL 0xe29498 // BOX DRAW LIGHT UP AND LEFT
+
 
 #define MAAX(a,b) ((a) > (b) ? (a) : (b))
 #define MIIN(a,b) ((a) < (b) ? (a) : (b))
@@ -8655,6 +8720,7 @@ void
 fmt(void)
 {
 	int c, d, h, i, j, n, w;
+	char *s=bufferOut+iCursorBufferOut;
 	save();
 	fmt_level = 0;
 	p1 = pop();
@@ -8671,13 +8737,21 @@ fmt(void)
 		malloc_kaput();
 	memset(fmt_buf, 0, n);
 	fmt_draw(0, h - 1, p1);
+	if(iCursorBufferOut!=0){
+		s = writeBuffer(s,',');
+		s = writeBuffer(s,' ');
+	}
 	for (i = 0; i < fmt_nrow; i++) {
 		for (j = 0; j < fmt_ncol; j++) {
 			c = fmt_buf[i * fmt_ncol + j];
-			writec(c);
+			//writec(c);
+			s = writeBuffer(s,c);
 		}
-		writec('\n');
+		//writec('\n');
+		s = writeBuffer(s,'\n');
+		
 	}
+	iCursorBufferOut+=s-(bufferOut+iCursorBufferOut);
 	free(fmt_buf);
 	restore();
 }
@@ -9740,6 +9814,35 @@ writec(int c)
 		write(f, buf + 2, 2);
 	else
 		write(f, buf + 1, 3);
+}
+
+char * writeBuffer(char *s,int c)
+{
+	uint8_t buf[4];
+	fflush(stdout);
+	if (c == 0)
+		c = ' ';
+	buf[0] = c >> 24;
+	buf[1] = c >> 16;
+	buf[2] = c >> 8;
+	buf[3] = c;
+	if (c < 256){
+		//write(f, buf + 3, 1);
+		memcpy(s,buf + 3, 1);
+		s++;
+	}
+	else if (c < 65536){
+		//write(f, buf + 2, 2);
+		memcpy(s,buf + 2, 2);
+		s+=2;
+	}
+	else{
+		//write(f, buf + 1, 3);
+		memcpy(s,buf + 1, 3);
+		s+=3;
+	}
+	return s;
+	
 }
 
 void
@@ -12246,586 +12349,6 @@ kronecker_nib(void)
 	push(p3);
 }
 
-void
-eval_latex(void)
-{
-	push(cadr(p1));
-	eval();
-	latex();
-	push_string(outbuf);
-}
-
-void
-latex(void)
-{
-	save();
-	latex_nib();
-	restore();
-}
-
-void
-latex_nib(void)
-{
-	outbuf_index = 0;
-	p1 = pop();
-	if (isstr(p1)) {
-		print_str("\\begin{verbatim}\n");
-		print_str(p1->u.str);
-		print_str("\n\\end{verbatim}");
-	} else {
-		print_str("\\begin{equation}\n");
-		latex_expr(p1);
-		print_str("\n\\end{equation}");
-	}
-	print_char('\0');
-}
-
-void
-latex_expr(struct atom *p)
-{
-	struct atom *q;
-	if (car(p) == symbol(ADD)) {
-		p = cdr(p);
-		q = car(p);
-		if (isnegativenumber(q) || (car(q) == symbol(MULTIPLY) && isnegativenumber(cadr(q))))
-			print_str("-");
-		latex_term(q);
-		p = cdr(p);
-		while (iscons(p)) {
-			q = car(p);
-			if (isnegativenumber(q) || (car(q) == symbol(MULTIPLY) && isnegativenumber(cadr(q))))
-				print_str("-");
-			else
-				print_str("+");
-			latex_term(q);
-			p = cdr(p);
-		}
-	} else {
-		if (isnegativenumber(p) || (car(p) == symbol(MULTIPLY) && isnegativenumber(cadr(p))))
-			print_str("-");
-		latex_term(p);
-	}
-}
-
-void
-latex_term(struct atom *p)
-{
-	int n = 0;
-	struct atom *q, *t;
-	if (car(p) == symbol(MULTIPLY)) {
-		// any denominators?
-		t = cdr(p);
-		while (iscons(t)) {
-			q = car(t);
-			if (car(q) == symbol(POWER) && isnegativenumber(caddr(q)))
-				break;
-			t = cdr(t);
-		}
-		if (iscons(t)) {
-			print_str("\\frac{");
-			latex_numerators(p);
-			print_str("}{");
-			latex_denominators(p);
-			print_str("}");
-			return;
-		}
-		// no denominators
-		p = cdr(p);
-		q = car(p);
-		if (isrational(q) && isminusone(q))
-			p = cdr(p); // skip -1
-		while (iscons(p)) {
-			if (++n > 1)
-				print_str("\\,"); // thin space between factors
-			latex_factor(car(p));
-			p = cdr(p);
-		}
-	} else
-		latex_factor(p);
-}
-
-void
-latex_numerators(struct atom *p)
-{
-	int n = 0;
-	char *s;
-	struct atom *q;
-	p = cdr(p);
-	q = car(p);
-	if (isrational(q)) {
-		if (!MEQUAL(q->u.q.a, 1)) {
-			s = mstr(q->u.q.a); // numerator
-			print_str(s);
-			n++;
-		}
-		p = cdr(p);
-	}
-	while (iscons(p)) {
-		q = car(p);
-		if (car(q) == symbol(POWER) && isnegativenumber(caddr(q))) {
-			p = cdr(p);
-			continue; // printed in denominator
-		}
-		if (n)
-			print_str("\\,"); // thin space between factors
-		latex_factor(q);
-		n++;
-		p = cdr(p);
-	}
-	if (n == 0)
-		print_str("1"); // there were no numerators
-}
-
-void
-latex_denominators(struct atom *p)
-{
-	int n = 0;
-	char *s;
-	struct atom *q;
-	p = cdr(p);
-	q = car(p);
-	if (isrational(q)) {
-		if (!MEQUAL(q->u.q.b, 1)) {
-			s = mstr(q->u.q.b); // denominator
-			print_str(s);
-			n++;
-		}
-		p = cdr(p);
-	}
-	while (iscons(p)) {
-		q = car(p);
-		if (car(q) != symbol(POWER) || !isnegativenumber(caddr(q))) {
-			p = cdr(p);
-			continue; // not a denominator
-		}
-		if (n)
-			print_str("\\,"); // thin space between factors
-		// example (-1)^(-1/4)
-		if (isminusone(cadr(q))) {
-			print_str("(-1)^{");
-			latex_number(caddr(q)); // -1/4 (sign not printed)
-			print_str("}");
-			n++;
-			p = cdr(p);
-			continue;
-		}
-		// example 1/y
-		if (isminusone(caddr(q))) {
-			latex_factor(cadr(q)); // y
-			n++;
-			p = cdr(p);
-			continue;
-		}
-		// example 1/y^2
-		latex_base(cadr(q)); // y
-		print_str("^{");
-		latex_number(caddr(q)); // -2 (sign not printed)
-		print_str("}");
-		n++;
-		p = cdr(p);
-	}
-	if (n == 0)
-		print_str("1"); // there were no denominators
-}
-
-void
-latex_factor(struct atom *p)
-{
-	switch (p->k) {
-	case RATIONAL:
-		latex_rational(p);
-		break;
-	case DOUBLE:
-		latex_double(p);
-		break;
-	case KSYM:
-	case USYM:
-		latex_symbol(p);
-		break;
-	case STR:
-		latex_string(p);
-		break;
-	case TENSOR:
-		latex_tensor(p);
-		break;
-	case CONS:
-		if (car(p) == symbol(POWER))
-			latex_power(p);
-		else if (car(p) == symbol(ADD) || car(p) == symbol(MULTIPLY))
-			latex_subexpr(p);
-		else
-			latex_function(p);
-		break;
-	}
-}
-
-void
-latex_number(struct atom *p)
-{
-	if (isrational(p))
-		latex_rational(p);
-	else
-		latex_double(p);
-}
-
-void
-latex_rational(struct atom *p)
-{
-	char *s;
-	if (MEQUAL(p->u.q.b, 1)) {
-		s = mstr(p->u.q.a);
-		print_str(s);
-		return;
-	}
-	print_str("\\frac{");
-	s = mstr(p->u.q.a);
-	print_str(s);
-	print_str("}{");
-	s = mstr(p->u.q.b);
-	print_str(s);
-	print_str("}");
-}
-
-void
-latex_double(struct atom *p)
-{
-	char *e, *s;
-	sprintf(tbuf, "%g", p->u.d);
-	s = tbuf;
-	if (*s == '-')
-		s++;
-	e = strchr(s, 'e');
-	if (e == NULL)
-		e = strchr(s, 'E');
-	if (e == NULL) {
-		if (strchr(s, '.') == NULL)
-			strcat(s, ".0");
-		print_str(s);
-		return;
-	}
-	*e = '\0';
-	print_str(s);
-	if (strchr(s, '.') == NULL)
-		print_str(".0");
-	print_str("\\times10^{");
-	s = e + 1;
-	if (*s == '+')
-		s++;
-	else if (*s == '-') {
-		s++;
-		print_str("-");
-	}
-	while (*s == '0')
-		s++; // skip leading zeroes
-	print_str(s);
-	print_str("}");
-}
-
-void
-latex_power(struct atom *p)
-{
-	// case (-1)^x
-	if (isminusone(cadr(p))) {
-		latex_imaginary(p);
-		return;
-	}
-	// case e^x
-	if (cadr(p) == symbol(EXP1)) {
-		print_str("\\operatorname{exp}\\left(");
-		latex_expr(caddr(p)); // x
-		print_str("\\right)");
-		return;
-	}
-	// example 1/y
-	if (isminusone(caddr(p))) {
-		print_str("\\frac{1}{");
-		latex_expr(cadr(p)); // y
-		print_str("}");
-		return;
-	}
-	// example 1/y^2
-	if (isnegativenumber(caddr(p))) {
-		print_str("\\frac{1}{");
-		latex_base(cadr(p)); // y
-		print_str("^{");
-		latex_number(caddr(p)); // -2 (sign not printed)
-		print_str("}}");
-		return;
-	}
-	// example y^x
-	latex_base(cadr(p)); // y
-	print_str("^{");
-	latex_exponent(caddr(p)); // x
-	print_str("}");
-}
-
-void
-latex_base(struct atom *p)
-{
-	if (isfraction(p) || isdouble(p) || car(p) == symbol(POWER))
-		latex_subexpr(p);
-	else
-		latex_factor(p);
-}
-
-void
-latex_exponent(struct atom *p)
-{
-	if (car(p) == symbol(POWER))
-		latex_subexpr(p);
-	else
-		latex_factor(p);
-}
-
-// case (-1)^x
-
-void
-latex_imaginary(struct atom *p)
-{
-	if (isimaginaryunit(p)) {
-		if (isimaginaryunit(get_binding(symbol(J_LOWER)))) {
-			print_str("j");
-			return;
-		}
-		if (isimaginaryunit(get_binding(symbol(I_LOWER)))) {
-			print_str("i");
-			return;
-		}
-	}
-	// example (-1)^(-1/4)
-	if (isnegativenumber(caddr(p))) {
-		print_str("\\frac{1}{(-1)^{");
-		latex_number(caddr(p)); // -1/4 (sign not printed)
-		print_str("}}");
-		return;
-	}
-	// example (-1)^x
-	print_str("(-1)^{");
-	latex_expr(caddr(p)); // x
-	print_str("}");
-}
-
-void
-latex_function(struct atom *p)
-{
-	// d(f(x),x)
-	if (car(p) == symbol(DERIVATIVE)) {
-		print_str("\\operatorname{d}\\left(");
-		latex_arglist(p);
-		print_str("\\right)");
-		return;
-	}
-	// n!
-	if (car(p) == symbol(FACTORIAL)) {
-		p = cadr(p);
-		if (isposint(p) || issymbol(p))
-			latex_expr(p);
-		else
-			latex_subexpr(p);
-		print_str("!");
-		return;
-	}
-	// A[1,2]
-	if (car(p) == symbol(INDEX)) {
-		p = cdr(p);
-		if (issymbol(car(p)))
-			latex_symbol(car(p));
-		else
-			latex_subexpr(car(p));
-		print_str("\\left[");
-		latex_arglist(p);
-		print_str("\\right]");
-		return;
-	}
-	if (car(p) == symbol(SETQ)) {
-		latex_expr(cadr(p));
-		print_str("=");
-		latex_expr(caddr(p));
-		return;
-	}
-	if (car(p) == symbol(TESTEQ)) {
-		latex_expr(cadr(p));
-		print_str("=");
-		latex_expr(caddr(p));
-		return;
-	}
-	if (car(p) == symbol(TESTGE)) {
-		latex_expr(cadr(p));
-		print_str("\\geq ");
-		latex_expr(caddr(p));
-		return;
-	}
-	if (car(p) == symbol(TESTGT)) {
-		latex_expr(cadr(p));
-		print_str(" > ");
-		latex_expr(caddr(p));
-		return;
-	}
-	if (car(p) == symbol(TESTLE)) {
-		latex_expr(cadr(p));
-		print_str("\\leq ");
-		latex_expr(caddr(p));
-		return;
-	}
-	if (car(p) == symbol(TESTLT)) {
-		latex_expr(cadr(p));
-		print_str(" < ");
-		latex_expr(caddr(p));
-		return;
-	}
-	// default
-	if (issymbol(car(p)))
-		latex_symbol(car(p));
-	else
-		latex_subexpr(car(p));
-	print_str("\\left(");
-	latex_arglist(p);
-	print_str("\\right)");
-}
-
-void
-latex_arglist(struct atom *p)
-{
-	p = cdr(p);
-	if (iscons(p)) {
-		latex_expr(car(p));
-		p = cdr(p);
-		while (iscons(p)) {
-			print_str(",");
-			latex_expr(car(p));
-			p = cdr(p);
-		}
-	}
-}
-
-void
-latex_subexpr(struct atom *p)
-{
-	print_str("\\left(");
-	latex_expr(p);
-	print_str("\\right)");
-}
-
-void
-latex_symbol(struct atom *p)
-{
-	int n;
-	char *s;
-	if (iskeyword(p) || p == symbol(LAST) || p == symbol(NIL) || p == symbol(TRACE) || p == symbol(TTY)) {
-		print_str("\\operatorname{");
-		print_str(printname(p));
-		print_str("}");
-		return;
-	}
-	if (p == symbol(EXP1)) {
-		print_str("\\operatorname{exp}(1)");
-		return;
-	}
-	s = printname(p);
-	n = latex_symbol_scan(s);
-	if ((int) strlen(s) == n) {
-		latex_symbol_shipout(s, n);
-		return;
-	}
-	// symbol has subscript
-	latex_symbol_shipout(s, n);
-	s += n;
-	print_str("_{");
-	while (*s) {
-		n = latex_symbol_scan(s);
-		latex_symbol_shipout(s, n);
-		s += n;
-	}
-	print_str("}");
-}
-
-char *latex_greek_tab[46] = {
-	"Alpha","Beta","Gamma","Delta","Epsilon","Zeta","Eta","Theta","Iota",
-	"Kappa","Lambda","Mu","Nu","Xi","Pi","Rho","Sigma","Tau","Upsilon",
-	"Phi","Chi","Psi","Omega",
-	"alpha","beta","gamma","delta","epsilon","zeta","eta","theta","iota",
-	"kappa","lambda","mu","nu","xi","pi","rho","sigma","tau","upsilon",
-	"phi","chi","psi","omega",
-};
-
-int
-latex_symbol_scan(char *s)
-{
-	int i, n;
-	for (i = 0; i < 46; i++) {
-		n = (int) strlen(latex_greek_tab[i]);
-		if (strncmp(s, latex_greek_tab[i], n) == 0)
-			return n;
-	}
-	return 1;
-}
-
-void
-latex_symbol_shipout(char *s, int n)
-{
-	int i;
-	if (n == 1) {
-		print_char(*s);
-		return;
-	}
-	// greek
-	print_str("\\");
-	for (i = 0; i < n; i++)
-		print_char(*s++);
-	print_str(" ");
-}
-
-void
-latex_tensor(struct atom *p)
-{
-	int i, n, k = 0;
-	struct tensor *t;
-	t = p->u.tensor;
-	// if odd rank then vector
-	if (t->ndim % 2 == 1) {
-		print_str("\\begin{pmatrix}");
-		n = t->dim[0];
-		for (i = 0; i < n; i++) {
-			latex_tensor_matrix(t, 1, &k);
-			if (i < n - 1)
-				print_str("\\cr "); // row separator
-		}
-		print_str("\\end{pmatrix}");
-	} else
-		latex_tensor_matrix(t, 0, &k);
-}
-
-void
-latex_tensor_matrix(struct tensor *t, int d, int *k)
-{
-	int i, j, ni, nj;
-	if (d == t->ndim) {
-		latex_expr(t->elem[*k]);
-		*k = *k + 1;
-		return;
-	}
-	ni = t->dim[d];
-	nj = t->dim[d + 1];
-	print_str("\\begin{pmatrix}");
-	for (i = 0; i < ni; i++) {
-		for (j = 0; j < nj; j++) {
-			latex_tensor_matrix(t, d + 2, k);
-			if (j < nj - 1)
-				print_str(" & "); // column separator
-		}
-		if (i < ni - 1)
-			print_str("\\cr "); // row separator
-	}
-	print_str("\\end{pmatrix}");
-}
-
-void
-latex_string(struct atom *p)
-{
-	print_str("\\text{");
-	print_str(p->u.str);
-	print_str("}");
-}
 
 void
 eval_lcm(void)
@@ -13210,8 +12733,7 @@ echo_stdin(void)
 	}
 }
 
-void
-run_infile(void)
+void run_infile(void)
 {
 	int fd, n;
 	char *buf;
@@ -13300,7 +12822,6 @@ display(void)
 {
 	switch (doc_type) {
 	case DOC_LATEX:
-		latex();
 		if (doc_state)
 			fputs("\\end{verbatim}\n\n", stdout);
 		fputs(outbuf, stdout);
@@ -13330,7 +12851,6 @@ begin_document(void)
 {
 	switch (doc_type) {
 	case DOC_LATEX:
-		begin_latex();
 		break;
 	case DOC_MATHML:
 		begin_mathml();
@@ -13348,7 +12868,6 @@ end_document(void)
 {
 	switch (doc_type) {
 	case DOC_LATEX:
-		end_latex();
 		break;
 	case DOC_MATHML:
 		end_mathml();
@@ -13361,24 +12880,6 @@ end_document(void)
 	}
 }
 
-void
-begin_latex(void)
-{
-	fputs(
-	"\\documentclass[12pt]{article}\n"
-	"\\usepackage{amsmath,amsfonts,amssymb}\n"
-	"\\usepackage[margin=2cm]{geometry}\n"
-	"\\begin{document}\n\n",
-	stdout);
-}
-
-void
-end_latex(void)
-{
-	if (doc_state)
-		fputs("\\end{verbatim}\n\n", stdout);
-	fputs("\\end{document}\n", stdout);
-}
 
 void
 begin_mathml(void)
@@ -13452,7 +12953,7 @@ mathjax_nib(void)
 		mml_string(p1, 0);
 	else {
 		print_str("$$\n");
-		latex_expr(p1);
+		
 		print_str("\n$$");
 	}
 	print_char('\0');
@@ -18842,20 +18343,18 @@ rotate_v(int n)
 char *trace1;
 char *trace2;
 
-void
-run()
+void run()
 {
-	
-	
 	if (setjmp(jmpbuf0))
 		return;
 	if (zero == NULL)
 		init();
 	
-	char intBuff[256];
-	strcpy(intBuff,cmdBuffer);
+	//char intBuff[MAXINPUTBUFF];
+	//strcpy(intBuff,cmdBuffer);
 	char *s;
-	s=intBuff;
+	s=cmdBuffer;
+	iCursorBufferOut=0; //en cada run() empezamos el buffer desde el principio
 	prep();
 	set_symbol(symbol(TRACE), zero, symbol(NIL));
 	for (;;) {
@@ -18866,11 +18365,13 @@ run()
 		if (tos || tof)
 			kaput("internal error");
 	}
+	eval_status();
 }
 
 void
 init(void)
 {
+	init_var();
 	init_symbol_table();
 	prep();
 	init_bignums();
@@ -19048,30 +18549,31 @@ void
 eval_status(void)
 {
 	outbuf_index = 0;
-	sprintf(tbuf, "block_count %d (%d%%)\n", block_count, 100 * block_count / MAXBLOCKS);
-	print_str(tbuf);
-	sprintf(tbuf, "free_count %d\n", free_count);
-	print_str(tbuf);
-	sprintf(tbuf, "gc_count %d\n", gc_count);
-	print_str(tbuf);
-	sprintf(tbuf, "bignum_count %d\n", bignum_count);
-	print_str(tbuf);
-	sprintf(tbuf, "ksym_count %d\n", ksym_count);
-	print_str(tbuf);
-	sprintf(tbuf, "usym_count %d\n", usym_count);
-	print_str(tbuf);
-	sprintf(tbuf, "string_count %d\n", string_count);
-	print_str(tbuf);
-	sprintf(tbuf, "tensor_count %d\n", tensor_count);
-	print_str(tbuf);
-	sprintf(tbuf, "max_level %d\n", max_level);
-	print_str(tbuf);
-	sprintf(tbuf, "max_stack %d (%d%%)\n", max_stack, 100 * max_stack / STACKSIZE);
-	print_str(tbuf);
-	sprintf(tbuf, "max_frame %d (%d%%)\n", max_frame, 100 * max_frame / FRAMESIZE);
-	print_str(tbuf);
-	sprintf(tbuf, "max_journal %d (%d%%)\n", max_journal, 100 * max_journal / JOURNALSIZE);
-	print_str(tbuf);
+// 	sprintf(tbuf, "block_count %d (%d%%)\n", block_count, 100 * block_count / MAXBLOCKS);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "free_count %d\n", free_count);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "gc_count %d\n", gc_count);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "bignum_count %d\n", bignum_count);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "ksym_count %d\n", ksym_count);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "usym_count %d\n", usym_count);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "string_count %d\n", string_count);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "tensor_count %d\n", tensor_count);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "max_level %d\n", max_level);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "max_stack %d (%d%%)\n", max_stack, 100 * max_stack / STACKSIZE);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "max_frame %d (%d%%)\n", max_frame, 100 * max_frame / FRAMESIZE);
+// 	print_str(tbuf);
+// 	sprintf(tbuf, "max_journal %d (%d%%)\n", max_journal, 100 * max_journal / JOURNALSIZE);
+// 	print_str(tbuf);
+// 	printf("Memoria RAM SPI     libre %d\n",heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
 	print_char('\0');
 	printbuf(outbuf, BLACK);
 	push_symbol(NIL);
@@ -19108,13 +18610,13 @@ run_init_script(void)
 	}
 }
 
-void
-stop(char *s)
+void stop(char *s)
 {
 	if (journaling)
 		longjmp(jmpbuf1, 1);
 	print_input_line();
 	sprintf(tbuf, "Stop: %s\n", s);
+	sprintf(bufferOut, "Stop: %s\n", s);
 	printbuf(tbuf, RED);
 	longjmp(jmpbuf0, 1);
 }
@@ -19129,6 +18631,7 @@ kaput(char *s)
 void
 malloc_kaput(void)
 {
+	printf("malloc kaput\n");
 	exit(1);
 }
 
@@ -19486,12 +18989,12 @@ get_token_nib(void)
 		return;
 	}
 	// number?
-	if (isdigit(*scan_str) || *scan_str == '.') {
-		while (isdigit(*scan_str))
+	if (isdigit((unsigned char)*scan_str) || *scan_str == '.') {
+		while (isdigit((unsigned char)*scan_str))
 			scan_str++;
 		if (*scan_str == '.') {
 			scan_str++;
-			while (isdigit(*scan_str))
+			while (isdigit((unsigned char)*scan_str))
 				scan_str++;
 			if (token_str + 1 == scan_str)
 				scan_error("expected decimal digit"); // only a decimal point
@@ -19502,8 +19005,8 @@ get_token_nib(void)
 		return;
 	}
 	// symbol?
-	if (isalpha(*scan_str)) {
-		while (isalnum(*scan_str))
+	if (isalpha((unsigned char)*scan_str)) {
+		while (isalnum((unsigned char)*scan_str))
 			scan_str++;
 		if (*scan_str == '(')
 			token = T_FUNCTION;
@@ -19568,6 +19071,7 @@ scan_error(char *errmsg)
 	outbuf_index = 0;
 	print_str("Stop: Syntax error, ");
 	print_str(errmsg);
+	sprintf(bufferOut,"Stop: Syntax error, %s",errmsg);
 	if (token_str < scan_str) {
 		print_str(" instead of '");
 		while (*token_str && token_str < scan_str)
@@ -20787,7 +20291,7 @@ struct se stab[] = {
 	{ "kronecker",		KRONECKER,	eval_kronecker		},
 
 	{ "last",		LAST,		NULL			},
-	{ "latex",		LATEX,		eval_latex		},
+	{ "latex",		LATEX,		NULL		},
 	{ "lcm",		LCM,		eval_lcm		},
 	{ "leading",		LEADING,	eval_leading		},
 	{ "log",		LOG,		eval_log		},

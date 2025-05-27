@@ -1,8 +1,8 @@
 
 MAKER_DIR=/home/angel/working-tmp/micropython/lvgl_micropython
 PARAM_DIR=/home/angel/working-tmp/micropython/lvgl_maker
-MODUL_EIGENMATH=/home/angel/working-tmp/micropython/lvgl_maker/eigenmath
-
+MODUL_EIGENMATH=/home/angel/working-tmp/micropython/lvgl_maker/modules/eigenmath
+MODUL_EIGENMATH_UX=/home/angel/working-tmp/micropython/lvgl_maker/modules/eigenmath_unix
 #cd ${MAKER_DIR}; pwd; python3 make.py unix DISPLAY=sdl_display INDEV=sdl_pointer USER_C_MODULE=${MODUL_EIGENMATH}/eigenmath.cmake
 
 
@@ -14,7 +14,7 @@ galdeano_dev:
 	cd ${MAKER_DIR}; python3 make.py esp32 BOARD=GALDEANO_CIVER_DEV DISPLAY=ILI9341 INDEV=XPT2046 USER_C_MODULE=${MODUL_EIGENMATH}/eigenmath.cmake
 
 unix:
-	cd ${MAKER_DIR}; pwd; python3 make.py unix DISPLAY=sdl_display INDEV=sdl_pointer 
+	cd ${MAKER_DIR}; pwd; python3 make.py unix DISPLAY=sdl_display INDEV=sdl_pointer USER_C_MODULE=${MODUL_EIGENMATH_UX}/eigenmath.cmake
 
 esp32_dev:
 	#cd ${MAKER_DIR}; python3 make.py esp32 BOARD=ESP32_GENERIC BOARD_VARIANT=SPIRAM DISPLAY=ILI9341 INDEV=XPT2046 USER_C_MODULE=${MODUL_EIGENMATH}/eigenmath.cmake
@@ -28,7 +28,8 @@ gg:
 
 exe:
 	chmod +x ${MAKER_DIR}/build/lvgl_micropy_unix
-	${MAKER_DIR}/build/lvgl_micropy_unix ${PARAM_DIR}/test/test2.py
+	#${MAKER_DIR}/build/lvgl_micropy_unix ${PARAM_DIR}/test/test2.py
+	${MAKER_DIR}/build/lvgl_micropy_unix 
 
 
 flash:
@@ -48,5 +49,8 @@ bb:
 	cp ${PARAM_DIR}/drivers/xpt2046.py ${MAKER_DIR}/api_drivers/common_api_drivers/indev
 	cp ${PARAM_DIR}/fonts/galdeano_14.c ${MAKER_DIR}/lib/lvgl/src/font
 	cp ${PARAM_DIR}/drivers/inisetup.py ${MAKER_DIR}/lib/micropython/ports/esp32/modules/
+	cp -r ${MODUL_EIGENMATH_UX} ${MAKER_DIR}/ext_mod/
+	echo 'include($${CMAKE_CURRENT_LIST_DIR}/eigenmath_unix/eigenmath.cmake)' >> ${MAKER_DIR}/ext_mod/micropython.cmake
 	#poner #define LV_FONT_CUSTOM_DECLARE  LV_FONT_DECLARE(galdeano_14) en lvgl.h
+	#sed -i '/TEXT_TO_BE_REPLACED/c\This line is removed by the admin.' /tmp/foo
 otro:
