@@ -14,7 +14,7 @@ galdeano_dev:
 	cd ${MAKER_DIR}; python3 make.py esp32 BOARD=GALDEANO_CIVER_DEV DISPLAY=ILI9341 INDEV=XPT2046 USER_C_MODULE=${MODUL_EIGENMATH}/eigenmath.cmake
 
 unix:
-	cd ${MAKER_DIR}; pwd; python3 make.py unix DISPLAY=sdl_display INDEV=sdl_pointer USER_C_MODULE=${MODUL_EIGENMATH_UX}/eigenmath.cmake
+	cd ${MAKER_DIR}; pwd; python3 make.py unix DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard
 
 esp32_dev:
 	#cd ${MAKER_DIR}; python3 make.py esp32 BOARD=ESP32_GENERIC BOARD_VARIANT=SPIRAM DISPLAY=ILI9341 INDEV=XPT2046 USER_C_MODULE=${MODUL_EIGENMATH}/eigenmath.cmake
