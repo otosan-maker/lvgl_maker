@@ -51,7 +51,8 @@ bb:
 	cp ${PARAM_DIR}/drivers/inisetup.py ${MAKER_DIR}/lib/micropython/ports/esp32/modules/
 	cp -r ${MODUL_EIGENMATH_UX} ${MAKER_DIR}/ext_mod/
 	cp ${PARAM_DIR}/modules/micropython.cmake ${MAKER_DIR}/ext_mod/
-	#echo 'include($${CMAKE_CURRENT_LIST_DIR}/eigenmath_unix/eigenmath.cmake)' >> ${MAKER_DIR}/ext_mod/micropython.cmake
+	cp ${MAKER_DIR}/lib/lv_conf.h ${MAKER_DIR}/lib/lv_conf.h.orig
+	sed -i 's/^#define LV_FONT_CUSTOM_DECLARE.*/#define LV_FONT_CUSTOM_DECLARE  LV_FONT_DECLARE(galdeano_14)/g' ${MAKER_DIR}/lib/lv_conf.h 
+	#echo 'include($${CMAKE_CURRENT_LIST_DIR}/eigenmath_unix/eigenmath.cmake)' >> ${MAKER_DIR}/ext_mod/micropython.cmake 
 	#poner #define LV_FONT_CUSTOM_DECLARE  LV_FONT_DECLARE(galdeano_14) en lvgl.h
-	#sed -i '/TEXT_TO_BE_REPLACED/c\This line is removed by the admin.' /tmp/foo
 otro:
